@@ -570,71 +570,74 @@ function EventCard({ event }) {
   const eventTime = event.event_time ? event.event_time.slice(0, 5) : ''
 
   const handleBooking = async () => {
-    setBookingLoading(true)
+    try {
+      setBookingLoading(true)
 
-    const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
+      const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
+      const telegramId = telegramUser?.id?.toString()
 
-    const telegramId = telegramUser?.id?.toString()
+      if (!telegramId) {
+        alert('Не вдалося отримати Telegram ID. Відкрий застосунок через Telegram.')
+        return
+      }
 
-    if (!telegramId) {
-      alert('Не вдалося отримати Telegram ID. Відкрий застосунок через Telegram.')
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('telegram_id', telegramId)
+        .single()
+
+      if (userError || !userData) {
+        console.log('USER ERROR:', userError)
+        alert('Спочатку потрібно пройти реєстрацію.')
+        return
+      }
+
+      const { error: bookingError } = await supabase.from('bookings').insert({
+        user_id: userData.id,
+        event_id: event.id,
+        booking_status: 'pending',
+        payment_status: 'unpaid',
+      })
+
+      if (bookingError) {
+        console.log('BOOKING ERROR:', bookingError)
+        alert('Помилка запису на подію')
+        return
+      }
+
+      const notifyResponse = await fetch(
+        'https://svoi-bot.onrender.com/notify-booking',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userName: telegramUser?.first_name || 'Користувач Telegram',
+            userAge: '',
+            eventTitle: event.title,
+            eventDate,
+            eventTime,
+            location: event.location,
+          }),
+        }
+      )
+
+      if (!notifyResponse.ok) {
+        console.log('NOTIFY ERROR TEXT:', await notifyResponse.text())
+        alert('Запис створено, але повідомлення адміну не відправилось.')
+        return
+      }
+
+      alert('Ви успішно записались! Очікуйте підтвердження.')
+    } catch (error) {
+      console.log('HANDLE BOOKING ERROR:', error)
+      alert('Сталася помилка під час запису.')
+    } finally {
       setBookingLoading(false)
-      return
     }
-
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('telegram_id', telegramId)
-      .single()
-
-    if (userError || !userData) {
-      alert('Спочатку потрібно пройти реєстрацію.')
-      setBookingLoading(false)
-      return
-    }
-
-    const { error: bookingError } = await supabase.from('bookings').insert({
-      user_id: userData.id,
-      event_id: event.id,
-      booking_status: 'pending',
-      payment_status: 'unpaid',
-    })
-
-if (bookingError) {
-  console.log('BOOKING ERROR:', bookingError)
-  alert('Помилка запису на подію')
-  setBookingLoading(false)
-  return
-}
-
-try {
-  const notifyResponse = await fetch('https://svoi-bot.onrender.com/notify-booking', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      userName: telegramUser?.first_name || 'Користувач Telegram',
-      userAge: '',
-      eventTitle: event.title,
-      eventDate,
-      eventTime,
-      location: event.location,
-    }),
-  })
-
-  console.log('NOTIFY STATUS:', notifyResponse.status)
-
-  if (!notifyResponse.ok) {
-    console.log('NOTIFY ERROR TEXT:', await notifyResponse.text())
   }
-} catch (notifyError) {
-  console.log('NOTIFY FETCH ERROR:', notifyError)
-}
-
-alert('Ви успішно записались! Очікуйте підтвердження.')
-setBookingLoading(false)
 
   return (
     <div className="card event-card">
