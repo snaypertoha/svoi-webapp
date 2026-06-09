@@ -601,15 +601,30 @@ function EventCard({ event }) {
       payment_status: 'unpaid',
     })
 
-    if (bookingError) {
-      console.log('BOOKING ERROR:', bookingError)
-      alert('Помилка запису на подію')
-      setBookingLoading(false)
-      return
-    }
+if (bookingError) {
+  console.log('BOOKING ERROR:', bookingError)
+  alert('Помилка запису на подію')
+  setBookingLoading(false)
+  return
+}
 
-    alert('Ви успішно записались! Очікуйте підтвердження.')
-    setBookingLoading(false)
+await fetch('http://localhost:3001/notify-booking', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    userName: telegramUser?.first_name || 'Користувач Telegram',
+    userAge: '',
+    eventTitle: event.title,
+    eventDate,
+    eventTime,
+    location: event.location,
+  }),
+})
+
+alert('Ви успішно записались! Очікуйте підтвердження.')
+setBookingLoading(false)
   }
 
   return (
