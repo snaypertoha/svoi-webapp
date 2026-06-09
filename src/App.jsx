@@ -980,19 +980,140 @@ function RadarScreen() {
 }
 
 function TicketsScreen() {
+  const [tickets, setTickets] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadTickets = async () => {
+      const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
+      const telegramId = telegramUser?.id?.toString()
+
+      if (!telegramId) {
+        setLoading(false)
+        return
+      }
+
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('telegram_id', telegramId)
+        .single()
+
+      if (userError || !userData) {
+        console.log('TICKETS USER ERROR:', userError)
+        setLoading(false)
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          booking_status,
+          payment_status,
+          created_at,
+          events (
+            title,
+            description,
+            event_date,
+            event_time,
+            location,
+            price,
+            event_format
+          )
+        `)
+        .eq('user_id', userData.id)
+        .eq('booking_status', 'approved')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.log('TICKETS ERROR:', error)
+        setLoading(false)
+        return
+      }
+
+      setTickets(data || [])
+      setLoading(false)
+    }
+
+    loadTickets()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="screen">
+        <h2>Мої квитки</h2>
+        <p className="description">Завантажуємо квитки...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="screen">
       <div>
-        <h2>Мої записи</h2>
+        <h2>Мої квитки</h2>
         <p className="description">
-          Тут будуть бронювання, квитки та історія подій.
+          Тут показуються тільки підтверджені записи на події.
         </p>
       </div>
 
-      <div className="card empty-card">
-        <Wallet />
-        <h3>Поки немає квитків</h3>
-        <p>Оберіть подію в афіші та забронюйте місце.</p>
+      {tickets.length === 0 && (
+        <div className="card empty-card">
+          <Wallet />
+          <h3>Поки немає підтверджених квитків</h3>
+          <p>Після підтвердження адміністратором квиток зʼявиться тут.</p>
+        </div>
+      )}
+
+      <div className="cards-list">
+        {tickets.map((ticket) => {
+          const event = ticket.events
+
+          const eventDate = event?.event_date
+            ? new Date(event.event_date).toLocaleDateString('uk-UA', {
+                day: 'numeric',
+                month: 'long',
+              })
+            : ''
+
+          const eventTime = event?.event_time
+            ? event.event_time.slice(0, 5)
+            : ''
+
+          return (
+            <div key={ticket.id} className="card event-card">
+              <div className="event-head">
+                <div>
+                  <span className="tag">Квиток підтверджено</span>
+                  <h3>{event?.title || 'Подія'}</h3>
+                  <p>{event?.description}</p>
+                </div>
+
+                <div className="event-price">
+                  <strong>{event?.price || 0} грн</strong>
+                  <span>{ticket.payment_status === 'paid' ? 'оплачено' : 'не оплачено'}</span>
+                </div>
+              </div>
+
+              <div className="event-meta">
+                <div>
+                  <CalendarDays />
+                  {eventDate}, {eventTime}
+                </div>
+
+                <div>
+                  <MapPin />
+                  {event?.location || 'Місце не вказано'}
+                </div>
+              </div>
+
+              <button className="primary-button full">
+                <Ticket size={16} />
+                Показати квиток
+              </button>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
