@@ -213,6 +213,7 @@ const submitOnboarding = async () => {
   }
 
   alert('Заявку надіслано! Профіль очікує модерації.')
+  setIsRegistered(true)
   setScreen('home')
 }
 
@@ -1119,9 +1120,12 @@ function TicketsScreen() {
   )
 }
 
-function BottomNav({ screen, setScreen }) {
+function BottomNav({ screen, setScreen, isRegistered }) {
   const items = [
-    { key: 'onboarding', label: 'Старт', icon: ShieldCheck },
+    ...(!isRegistered
+      ? [{ key: 'onboarding', label: 'Старт', icon: ShieldCheck }]
+      : []),
+
     { key: 'home', label: 'Головна', icon: Sparkles },
     { key: 'events', label: 'Афіша', icon: CalendarDays },
     { key: 'radar', label: 'Радар', icon: MapPin },
@@ -1152,7 +1156,7 @@ function BottomNav({ screen, setScreen }) {
 
 export default function App() {
   const [screen, setScreen] = useState('loading')
-
+  const [isRegistered, setIsRegistered] = useState(false)
   useEffect(() => {
     const tg = window.Telegram?.WebApp
 
@@ -1181,8 +1185,10 @@ export default function App() {
       }
 
       if (data) {
+        setIsRegistered(true)
         setScreen('home')
       } else {
+        setIsRegistered(false)
         setScreen('onboarding')
       }
     }
@@ -1224,7 +1230,11 @@ export default function App() {
       <div className="phone-shell">
         <AppHeader />
         <main>{renderScreen()}</main>
-        <BottomNav screen={screen} setScreen={setScreen} />
+        <BottomNav
+          screen={screen}
+          setScreen={setScreen}
+          isRegistered={isRegistered}
+        />
       </div>
     </div>
   )
