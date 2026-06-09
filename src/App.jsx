@@ -147,6 +147,7 @@ function OnboardingScreen({ setScreen }) {
   const [form, setForm] = useState({
     name: '',
     age: '',
+    gender: 'female',
     city: 'Харків',
     searchAgeFrom: '25',
     searchAgeTo: '38',
@@ -197,6 +198,7 @@ const submitOnboarding = async () => {
     user_id: userData.id,
     name: form.name,
     age: Number(form.age),
+    gender: form.gender,
     city: form.city,
     interests: form.interests,
     search_age_from: Number(form.searchAgeFrom),
@@ -255,7 +257,7 @@ const nextStep = () => {
               placeholder="Наприклад, Анна"
               onChange={(value) => setForm({ ...form, name: value })}
             />
-
+            
             <InputField
               label="Реальний вік"
               value={form.age}
@@ -268,7 +270,35 @@ const nextStep = () => {
               Вік потрібен для безпеки та модерації. Його видимість можна буде
               налаштувати.
             </p>
+            <div>
+              <h4>Стать</h4>
 
+              <div className="two-cols">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, gender: 'female' })}
+                  className={
+                    form.gender === 'female'
+                      ? 'verify-button active'
+                      : 'verify-button'
+                  }
+                >
+                  Жінка
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, gender: 'male' })}
+                  className={
+                    form.gender === 'male'
+                      ? 'verify-button active'
+                      : 'verify-button'
+                  }
+                >
+                  Чоловік
+                </button>
+              </div>
+            </div>
             <InputField
               label="Місто"
               value={form.city}
@@ -883,14 +913,53 @@ function BottomNav({ screen, setScreen }) {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState('onboarding')
+  const [screen, setScreen] = useState('loading')
 
-  const tg = window.Telegram?.WebApp
-  tg?.ready()
-  tg?.expand()
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp
+
+    tg?.ready()
+    tg?.expand()
+
+    const checkUser = async () => {
+      const telegramUser = tg?.initDataUnsafe?.user
+      const telegramId = telegramUser?.id?.toString()
+
+      if (!telegramId) {
+        setScreen('onboarding')
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('telegram_id', telegramId)
+        .maybeSingle()
+
+      if (error) {
+        console.log('CHECK USER ERROR:', error)
+        setScreen('onboarding')
+        return
+      }
+
+      if (data) {
+        setScreen('home')
+      } else {
+        setScreen('onboarding')
+      }
+    }
+
+    checkUser()
+  }, [])
 
   const renderScreen = () => {
     switch (screen) {
+      case 'loading':
+        return (
+          <div className="screen">
+            <p className="description">Завантажуємо профіль...</p>
+          </div>
+        )
       case 'onboarding':
         return <OnboardingScreen setScreen={setScreen} />
       case 'home':
