@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from './lib/supabase'
 import {
   CalendarDays,
   Heart,
@@ -167,13 +168,59 @@ function OnboardingScreen({ setScreen }) {
     })
   }
 
-  const nextStep = () => {
-    if (step < onboardingSteps.length - 1) {
-      setStep(step + 1)
-    } else {
-      setScreen('home')
-    }
+const submitOnboarding = async () => {
+  const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
+
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .upsert(
+      {
+        telegram_id: telegramUser?.id?.toString() || Date.now().toString(),
+        first_name: telegramUser?.first_name || form.name,
+        username: telegramUser?.username || null,
+        status: 'pending',
+      },
+      {
+        onConflict: 'telegram_id',
+      }
+    )
+    .select()
+    .single()
+
+  if (userError) {
+    console.log('USER ERROR:', userError)
+    alert('Помилка збереження користувача')
+    return
   }
+
+  const { error: profileError } = await supabase.from('profiles').insert({
+    user_id: userData.id,
+    name: form.name,
+    age: Number(form.age),
+    city: form.city,
+    interests: form.interests,
+    search_age_from: Number(form.searchAgeFrom),
+    search_age_to: Number(form.searchAgeTo),
+    formats: form.formats,
+  })
+
+  if (profileError) {
+    console.log('PROFILE ERROR:', profileError)
+    alert('Помилка збереження анкети')
+    return
+  }
+
+  alert('Заявку надіслано! Профіль очікує модерації.')
+  setScreen('home')
+}
+
+const nextStep = () => {
+  if (step < onboardingSteps.length - 1) {
+    setStep(step + 1)
+  } else {
+    submitOnboarding()
+  }
+}
 
   const prevStep = () => {
     if (step > 0) setStep(step - 1)
@@ -444,11 +491,33 @@ function FeatureCard({ icon, title, text, onClick }) {
 
 function EventsScreen() {
   const [activeCategory, setActiveCategory] = useState('Усі')
+  const [dbEvents, setDbEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadEvents = async () => {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('status', 'active')
+        .order('event_date', { ascending: true })
+
+      if (error) {
+        console.log('EVENTS ERROR:', error)
+      } else {
+        setDbEvents(data || [])
+      }
+
+      setLoading(false)
+    }
+
+    loadEvents()
+  }, [])
 
   const filteredEvents = useMemo(() => {
-    if (activeCategory === 'Усі') return events
-    return events.filter((event) => event.category === activeCategory)
-  }, [activeCategory])
+    if (activeCategory === 'Усі') return dbEvents
+    return dbEvents.filter((event) => event.category === activeCategory)
+  }, [activeCategory, dbEvents])
 
   return (
     <div className="screen">
@@ -473,6 +542,12 @@ function EventsScreen() {
         ))}
       </div>
 
+      {loading && <p className="description">Завантажуємо події...</p>}
+
+      {!loading && filteredEvents.length === 0 && (
+        <p className="description">Поки немає подій у цій категорії.</p>
+      )}
+
       <div className="cards-list">
         {filteredEvents.map((event) => (
           <EventCard key={event.id} event={event} />
@@ -483,38 +558,96 @@ function EventsScreen() {
 }
 
 function EventCard({ event }) {
+  const [bookingLoading, setBookingLoading] = useState(false)
+
+  const eventDate = event.event_date
+    ? new Date(event.event_date).toLocaleDateString('uk-UA', {
+        day: 'numeric',
+        month: 'long',
+      })
+    : ''
+
+  const eventTime = event.event_time ? event.event_time.slice(0, 5) : ''
+
+  const handleBooking = async () => {
+    setBookingLoading(true)
+
+    const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
+
+    const telegramId = telegramUser?.id?.toString()
+
+    if (!telegramId) {
+      alert('Не вдалося отримати Telegram ID. Відкрий застосунок через Telegram.')
+      setBookingLoading(false)
+      return
+    }
+
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('telegram_id', telegramId)
+      .single()
+
+    if (userError || !userData) {
+      alert('Спочатку потрібно пройти реєстрацію.')
+      setBookingLoading(false)
+      return
+    }
+
+    const { error: bookingError } = await supabase.from('bookings').insert({
+      user_id: userData.id,
+      event_id: event.id,
+      booking_status: 'pending',
+      payment_status: 'unpaid',
+    })
+
+    if (bookingError) {
+      console.log('BOOKING ERROR:', bookingError)
+      alert('Помилка запису на подію')
+      setBookingLoading(false)
+      return
+    }
+
+    alert('Ви успішно записались! Очікуйте підтвердження.')
+    setBookingLoading(false)
+  }
+
   return (
     <div className="card event-card">
       <div className="event-head">
         <div>
-          <span className="tag">{event.format}</span>
+          <span className="tag">{event.event_format}</span>
           <h3>{event.title}</h3>
           <p>{event.description}</p>
         </div>
 
         <div className="event-price">
-          <strong>{event.price}</strong>
-          <span>{event.spots} місць</span>
+          <strong>{event.price} грн</strong>
+          <span>{event.spots_left} місць</span>
         </div>
       </div>
 
       <div className="event-meta">
         <div>
           <CalendarDays />
-          {event.date}, {event.time}
+          {eventDate}, {eventTime}
         </div>
 
         <div>
           <MapPin />
-          {event.place}
+          {event.location}
         </div>
       </div>
 
       <div className="two-cols">
         <button className="secondary-button">Детальніше</button>
-        <button className="primary-button">
+        <button
+          className="primary-button"
+          onClick={handleBooking}
+          disabled={bookingLoading}
+        >
           <Ticket size={16} />
-          Записатись
+          {bookingLoading ? 'Записуємо...' : 'Записатись'}
         </button>
       </div>
     </div>
