@@ -712,6 +712,91 @@ function EventCard({ event }) {
 }
 
 function ProfileScreen() {
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
+      const telegramId = telegramUser?.id?.toString()
+
+      if (!telegramId) {
+        setLoading(false)
+        return
+      }
+
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, status, first_name, username')
+        .eq('telegram_id', telegramId)
+        .single()
+
+      if (userError || !userData) {
+        console.log('PROFILE USER ERROR:', userError)
+        setLoading(false)
+        return
+      }
+
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userData.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (profileError) {
+        console.log('PROFILE DATA ERROR:', profileError)
+        setLoading(false)
+        return
+      }
+
+      setProfile({
+        ...profileData,
+        userStatus: userData.status,
+        telegramName: userData.first_name,
+        username: userData.username,
+      })
+
+      setLoading(false)
+    }
+
+    loadProfile()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="screen">
+        <p className="description">Завантажуємо профіль...</p>
+      </div>
+    )
+  }
+
+  if (!profile) {
+    return (
+      <div className="screen">
+        <h2>Профіль</h2>
+        <p className="description">
+          Профіль не знайдено. Спочатку пройди реєстрацію.
+        </p>
+      </div>
+    )
+  }
+
+  const genderLabel =
+    profile.gender === 'female'
+      ? 'Жінка'
+      : profile.gender === 'male'
+        ? 'Чоловік'
+        : 'Не вказано'
+
+  const statusLabel =
+    profile.userStatus === 'approved'
+      ? 'підтверджено'
+      : profile.userStatus === 'rejected'
+        ? 'відхилено'
+        : 'на модерації'
+
   return (
     <div className="screen">
       <div>
@@ -723,18 +808,51 @@ function ProfileScreen() {
 
       <div className="card">
         <div className="profile-head">
-          <div className="avatar">А</div>
+          <div className="avatar">
+            {(profile.name || profile.telegramName || 'С')[0]}
+          </div>
+
           <div>
-            <h3>Анна, 32</h3>
-            <p>Харків · профіль на модерації</p>
+            <h3>
+              {profile.name || profile.telegramName || 'Користувач'}
+              {profile.age ? `, ${profile.age}` : ''}
+            </h3>
+            <p>
+              {profile.city || 'Харків'} · профіль {statusLabel}
+            </p>
           </div>
         </div>
 
         <div className="info-grid">
-          <InfoBox label="Вік для пошуку" value="25–38" />
-          <InfoBox label="Формат" value="Дівчата / Мікс" />
-          <InfoBox label="Інтереси" value="Б'юті, кава, бізнес" />
-          <InfoBox label="Видимість" value="Тільки верифіковані" />
+          <InfoBox
+            label="Стать"
+            value={genderLabel}
+          />
+
+          <InfoBox
+            label="Вік для пошуку"
+            value={`${profile.search_age_from || '—'}–${profile.search_age_to || '—'}`}
+          />
+
+          <InfoBox
+            label="Формат"
+            value={profile.formats?.length ? profile.formats.join(', ') : 'Не обрано'}
+          />
+
+          <InfoBox
+            label="Інтереси"
+            value={profile.interests?.length ? profile.interests.join(', ') : 'Не обрано'}
+          />
+
+          <InfoBox
+            label="Видимість"
+            value="Тільки верифіковані"
+          />
+
+          <InfoBox
+            label="Telegram"
+            value={profile.username ? `@${profile.username}` : 'Не вказано'}
+          />
         </div>
 
         <button className="primary-button full">Редагувати анкету</button>
@@ -743,8 +861,7 @@ function ProfileScreen() {
       <div className="card">
         <h3>Верифікація</h3>
         <p className="description">
-          Для доступу до закритих розділів потрібно підтвердити особистість
-          через Instagram або коротке відео.
+          Статус профілю: {statusLabel}. Після підтвердження відкривається повний доступ до комʼюніті.
         </p>
 
         <div className="two-cols">
