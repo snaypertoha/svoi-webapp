@@ -608,24 +608,33 @@ if (bookingError) {
   return
 }
 
-await fetch('http://localhost:3001/notify-booking', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    userName: telegramUser?.first_name || 'Користувач Telegram',
-    userAge: '',
-    eventTitle: event.title,
-    eventDate,
-    eventTime,
-    location: event.location,
-  }),
-})
+try {
+  const notifyResponse = await fetch('https://svoi-bot.onrender.com/notify-booking', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      userName: telegramUser?.first_name || 'Користувач Telegram',
+      userAge: '',
+      eventTitle: event.title,
+      eventDate,
+      eventTime,
+      location: event.location,
+    }),
+  })
+
+  console.log('NOTIFY STATUS:', notifyResponse.status)
+
+  if (!notifyResponse.ok) {
+    console.log('NOTIFY ERROR TEXT:', await notifyResponse.text())
+  }
+} catch (notifyError) {
+  console.log('NOTIFY FETCH ERROR:', notifyError)
+}
 
 alert('Ви успішно записались! Очікуйте підтвердження.')
 setBookingLoading(false)
-  }
 
   return (
     <div className="card event-card">
